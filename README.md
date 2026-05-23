@@ -1,4 +1,4 @@
-# Academic Research Skills for Claude Code
+# Academic Research Skills for Claude Code and Codex
 
 [![Version](https://img.shields.io/badge/version-v3.9.4.2-blue)](https://github.com/Imbad0202/academic-research-skills/releases/tag/v3.9.4.2)
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/license-CC%20BY--NC%204.0-lightgrey)](https://creativecommons.org/licenses/by-nc/4.0/)
@@ -16,6 +16,17 @@ A comprehensive suite of Claude Code skills for academic research, covering the 
 ```
 
 Then try `/ars-plan` to walk through your paper structure via Socratic dialogue, or jump to [Quick install](#quick-install) for prerequisites and the traditional symlink flow.
+
+**Using Codex CLI?** This fork includes Codex-native plugin packaging:
+
+```bash
+codex plugin marketplace add pa4uslf/codex-research-skills --ref main
+codex plugin add codex-research-skills@codex-research-skills
+```
+
+Then restart Codex and use `$academic-research-suite`, `$ars-deep-research`,
+`$ars-academic-paper`, `$ars-paper-reviewer`, or `$ars-academic-pipeline`. See
+[docs/CODEX.md](docs/CODEX.md) for local development and validation details.
 
 > **AI is your copilot, not the pilot.** This tool won't write your paper for you. It handles the grunt work — hunting down references, formatting citations, verifying data, checking logical consistency — so you can focus on the parts that actually require your brain: defining the question, choosing the method, interpreting what the data means, and writing the sentence after "I argue that."
 >
@@ -60,7 +71,9 @@ The architecture doc supersedes the sprawling pipeline description that used to 
 
 **👉 [docs/SETUP.md](docs/SETUP.md)** — full guide: install Claude Code, set up API keys, optional Pandoc/tectonic for DOCX/PDF, cross-model verification (`ARS_CROSS_MODEL`), and five installation methods (Plugin, project skills, global skills, claude.ai Project, repo-cloned).
 
-**Using Codex CLI?** Install the sibling distribution instead: [`Imbad0202/academic-research-skills-codex`](https://github.com/Imbad0202/academic-research-skills-codex) — same workflow content, Codex-native packaging as a single `$academic-research-suite` skill with `ars-*` aliases.
+**Using Codex CLI?** This fork ships Codex-native plugin metadata in
+`plugin/.codex-plugin/` and wrapper skills in `plugin/codex-skills/`. See
+[docs/CODEX.md](docs/CODEX.md).
 
 ## Performance & cost
 

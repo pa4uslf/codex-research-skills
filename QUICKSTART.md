@@ -4,6 +4,21 @@ Get from zero to your first AI-assisted research in 3 steps.
 
 ## Step 1: Install
 
+### Codex CLI
+
+```bash
+codex plugin marketplace add pa4uslf/codex-research-skills --ref main
+codex plugin add codex-research-skills@codex-research-skills
+```
+
+Restart Codex, then invoke `$academic-research-suite` or one of the direct
+wrappers: `$ars-deep-research`, `$ars-academic-paper`, `$ars-paper-reviewer`,
+or `$ars-academic-pipeline`.
+
+For local development from a checkout, see [docs/CODEX.md](docs/CODEX.md).
+
+### Claude Code
+
 ```bash
 # Install Claude Code
 curl -fsSL https://claude.ai/install.sh | bash
@@ -25,6 +40,10 @@ Each skill must sit at `.claude/skills/<skill-name>/SKILL.md` for Claude Code to
 ## Step 2: Launch
 
 ```bash
+# Codex
+codex
+
+# Claude Code
 claude
 ```
 

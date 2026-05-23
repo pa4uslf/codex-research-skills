@@ -175,6 +175,30 @@ Claude discovers skills at `<install-root>/<skill-name>/SKILL.md`. This repo con
 
 Do not install the whole repository as one nested skill folder under `.claude/skills/academic-research-skills/`; that buries the four `SKILL.md` files one level too deep for discovery. See Anthropic's [Claude Code Skills documentation](https://code.claude.com/docs/en/skills).
 
+## Codex CLI plugin install
+
+This fork also includes Codex-native plugin packaging. Codex reads
+`plugin/.codex-plugin/plugin.json` and loads wrapper skills from
+`plugin/codex-skills/`.
+
+```bash
+codex plugin marketplace add pa4uslf/codex-research-skills --ref main
+codex plugin add codex-research-skills@codex-research-skills
+```
+
+For local development from a checkout:
+
+```bash
+cd /path/to/codex-research-skills
+codex plugin marketplace add .
+codex plugin add codex-research-skills@codex-research-skills
+```
+
+Restart Codex after installation. Prefer `$academic-research-suite` for
+automatic routing, or call `$ars-deep-research`, `$ars-academic-paper`,
+`$ars-paper-reviewer`, and `$ars-academic-pipeline` directly. See
+[`docs/CODEX.md`](CODEX.md) for validation commands and packaging notes.
+
 ### Method 0: Claude Code Plugin (v3.7.0+, recommended for Claude Code CLI / IDE users)
 
 If you use Claude Code CLI, VS Code extension, or JetBrains extension, install ARS as a plugin:

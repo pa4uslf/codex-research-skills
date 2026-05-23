@@ -1,0 +1,42 @@
+{
+  "name": "codex-research-skills",
+  "version": "3.9.4.2-codex.1",
+  "description": "Codex-native packaging for Academic Research Skills: research, paper writing, peer review, and end-to-end academic pipeline workflows.",
+  "author": {
+    "name": "Cheng-I Wu; Codex adaptation by pa4uslf",
+    "url": "https://github.com/pa4uslf/codex-research-skills"
+  },
+  "homepage": "https://github.com/pa4uslf/codex-research-skills",
+  "repository": "https://github.com/pa4uslf/codex-research-skills",
+  "license": "CC-BY-NC-4.0",
+  "keywords": [
+    "codex",
+    "academic",
+    "research",
+    "writing",
+    "review",
+    "literature-review",
+    "systematic-review",
+    "peer-review"
+  ],
+  "skills": "./codex-skills/",
+  "interface": {
+    "displayName": "Academic Research Skills for Codex",
+    "shortDescription": "Academic research, writing, review, and pipeline skills for Codex",
+    "longDescription": "Codex-native wrappers around Academic Research Skills. Includes deep research, academic paper writing, peer review, and full pipeline orchestration while keeping the upstream workflow content in the repository root.",
+    "developerName": "pa4uslf",
+    "category": "Education",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/pa4uslf/codex-research-skills",
+    "privacyPolicyURL": "https://github.com/pa4uslf/codex-research-skills/blob/main/SECURITY.md",
+    "termsOfServiceURL": "https://github.com/pa4uslf/codex-research-skills/blob/main/LICENSE",
+    "defaultPrompt": [
+      "Use Academic Research Skills in Codex for literature review, paper writing, peer review, or a full research-to-publication pipeline."
+    ],
+    "brandColor": "#2454A6",
+    "screenshots": []
+  }
+}
