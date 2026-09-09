@@ -1,6 +1,6 @@
 # ARS 安裝設定
 
-Academic Research Skills 的前置需求與選用設定。只需要 Markdown 輸出與預設 Claude Opus 4.7 pipeline 的人，大部分內容可以略過。請見下方「最小可行設定」。
+Academic Research Skills 的前置需求與選用設定。只需要 Markdown 輸出與預設 Claude pipeline（繼承 session 模型）的人，大部分內容可以略過。請見下方「最小可行設定」。
 
 ---
 
@@ -97,7 +97,7 @@ curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh
 v3.6.4 附三個 reference Python adapter，位於 `scripts/adapters/`：
 
 ```bash
-# 1. Install adapter dependencies (PyYAML + jsonschema, already in requirements-dev.txt)
+# 1. Install the dev dependencies (the adapter requirements are declared in requirements-dev.txt)
 pip install -r requirements-dev.txt
 
 # 2. Run a reference adapter (pick one that matches your corpus source).
@@ -116,31 +116,82 @@ v3.6.5 接上 `bibliography_agent`（deep-research, Phase 1）與 `literature_st
 
 ## 選用環境變數（v3.5.1+）
 
-ARS 暴露若干 opt-in flag，全部預設 OFF；設定後僅影響當前 session。
+ARS 暴露若干 opt-in flag，全部預設 OFF；設定後僅影響當前 session。這些 flag 是行為開關；「常設的內容偏好」（引用格式、檢索納入排除）見下方 [§「以 CLAUDE.md 設定常設偏好」](#以-claudemd-設定常設偏好)。
 
 | Flag | 起始版本 | 作用 | 參考 |
 |---|---|---|---|
 | `ARS_CROSS_MODEL` | v3.0 | 啟用跨模型驗證（見下節） | [§「跨模型驗證」](#跨模型驗證選用) |
+| `ARS_CROSS_MODEL_TRANSPORT=codex` | #630 | 僅讓引用完整性查驗使用 ChatGPT 訂閱；DA／審稿／判斷路徑仍須 API key | `shared/cross_model_verification.md` |
 | `ARS_SOCRATIC_READING_PROBE=1` | v3.5.1 | 啟用 `socratic_mentor_agent` 的讀書檢查 probe layer。僅 goal-oriented intent；使用者引用過具體論文時最多觸發一次；婉拒不留紀錄懲罰。 | `deep-research/agents/socratic_mentor_agent.md` |
 | `ARS_PASSPORT_RESET=1` | v3.6.3 | 把每個 FULL checkpoint 提升為 context 重置邊界。**emit** boundary entry 必須設此 flag；新 session 用 `resume_from_passport=<hash>` 續跑**不需要** flag。`systematic-review` 模式下 flag ON 時，每個 FULL checkpoint 一律強制重置。 | `academic-pipeline/references/passport_as_reset_boundary.md` |
 | `ARS_CROSS_MODEL_SAMPLE_INTERVAL` | v3.5.0 | 跨模型完整性抽查的取樣間隔（advisory） | `shared/cross_model_verification.md` |
+| `ARS_VERIFICATION_CACHE_PATH` | v3.11 | 覆寫引用查驗 cache 的位置（見下節）。不是 on/off flag——cache 預設開啟，此變數只改位置。 | `scripts/verification_cache.py` |
+| `ARS_CACHE_STALE_ADVISORY_DAYS` | v3.18.0 (#541) | cache 時效 advisory 的天數門檻：由 cache 供應且超過此天數的查驗結果，會在誠信檢查點以 `ADV-CACHE` advisory 列呈現（永不擋關）。預設 30；`0` 停用；格式錯誤或負值回落預設。 | `scripts/verification_cache.py` |
+| `ARS_CACHE_REVALIDATE=1` | v3.18.0 (#541) | 選擇性即時重驗（gate 層）：超過時效門檻的快取列改為逐列繞過、即時查驗並回寫。成本隨過期列數量增加。預設關閉＝僅 advisory。 | `scripts/verification_gate/__init__.py` + `integrity_verification_agent.md` § A0.5 |
+| `ARS_MODEL_TIERING` | v3.16.0 (#517) | Opt-in 模型分層：`economy`（frontier session——execution 型 agent 降一階，樓地板 Opus 級）或 `quality-boost`（低於 frontier 的 session——judgment 型 agent 在檢查點表面跳升到 frontier 級：Stage 2.5/4.5 關卡、opt-in 的 Stage 4→5 claim–ref audit、最終審查）。未設定 = 全部用 session model；未知值警告一次後視同未設定。 | `shared/model_tiering.md` |
+
+---
+
+## 以 CLAUDE.md 設定常設偏好
+
+ARS 刻意不提供使用者層級的設定檔。要讓內容偏好「設一次、每次都生效」，支援的做法是在你專案的 `CLAUDE.md` 放一個偏好區塊：Claude Code 在 session 開始時載入，該 session 派出的每個 ARS agent 都會繼承。這是明文的設計立場，不是缺功能：檢索相關偏好本質上是每個專案自己的納入排除判準，屬於 Annotated Bibliography 的 `search_strategy`（Schema 2）；跨專案靜默繼承的全域設定，對系統性文獻回顧是方法學上的風險。決策紀錄：#634。
+
+可直接複製的模板（依需要調整）：
+
+```markdown
+## ARS standing preferences
+
+- Citation style: APA 7th unless a venue template says otherwise.
+- Literature search: exclude preprints unless I explicitly ask; prefer
+  peer-reviewed journal articles.
+- Journal tier: when ranking or shortlisting sources, prefer higher-tier
+  journals in the field, and say so when unsure of a journal's tier.
+- Open access: prefer OA versions when citing, and link the OA copy.
+```
+
+兩個誠實的限制：
+
+- **期刊分級是模型自己的判斷。** 四個查驗索引（Semantic Scholar、OpenAlex、Crossref、arXiv）都不提供 quartile 或分級資料，所以期刊層級偏好靠模型知識執行，且應如實聲明；分級主張只能當參考，不是查驗過的 metadata。
+- **刻意不提供輸出目錄設定。** 使用者提供的 Material Passport 路徑是唯一的發現錨點（v3.6.8 設計輪決議 R4-003）；常設輸出位置會製造第二個真值來源。每次執行時直接指定目的地。
+
+若某偏好會改變系統性回顧「可納入什麼」（排除 preprint、語言限制、日期範圍），請寫進該專案的 `search_strategy`，不要只靠環境偏好區塊：偏好區塊設定預設值，Schema 2 的 `search_strategy` 才是可稽核的紀錄。
+
+重新評估條件（記錄於 #634）：只有在更多使用者獨立提出需求，或某個平台移植版缺少 `CLAUDE.md` 等價物時，才重新考慮 ARS 自有的偏好介面；屆時架構上一致的形狀是 Material Passport 層級的 `user_preferences` 輸入欄（如同 `literature_corpus[]`），不是全機器的設定檔。
+
+---
+
+## 引用查驗 cache（v3.11，#182）
+
+確定性引用存在性 gate（#182）會對每筆引用比對 Semantic Scholar、OpenAlex、Crossref、arXiv。為避免跨草稿重複查同一篇論文，結果存進本機 SQLite。
+
+- **無需設定。** Cache 首次使用時自動建在 `~/.cache/ars/verification.db`，條目 90 天後過期。arXiv resolver 不需 API key。
+- **改位置**：匯出 `ARS_VERIFICATION_CACHE_PATH=/your/path.db`（例如跨專案共用一份 cache，或放在較快的磁碟）。
+- **作廢單筆引用**：`/ars-cache-invalidate <citation_key>`——移除該 key 的所有 cache 列（四個 resolver、所有 query form）；若無 cache 則為冪等 no-op。
+
+Cache 為單一 process（SQLite WAL）；多使用者共用同一 cache 檔案不在範圍內。
 
 ---
 
 ## 跨模型驗證（選用）
 
-ARS 使用 Claude Opus 4.7 即可完整運作。想要更高信心，可選擇啟用第二 AI 模型來獨立驗證完整性檢查，並挑戰魔鬼代言人。
+ARS 使用繼承的 Claude session 模型即可完整運作。想要更高信心，可選擇啟用第二 AI 模型來獨立驗證完整性檢查，並挑戰魔鬼代言人。
 
 ### 快速設定
 
 ```bash
 # Step 1: Set your API key (choose one or both)
-export OPENAI_API_KEY="sk-your-key-here"        # For GPT-5.4 Pro
+export OPENAI_API_KEY="sk-your-key-here"        # For GPT-6 Astra / GPT-5.6 Sol / GPT-5.5
 export GOOGLE_AI_API_KEY="AIza-your-key-here"    # For Gemini 3.1 Pro
 
 # Step 2: Choose your cross-verification model
-export ARS_CROSS_MODEL="gpt-5.4-pro"            # Best reasoning
-# or: export ARS_CROSS_MODEL="gemini-3.1-pro-preview"  # Strong at factual verification
+export ARS_CROSS_MODEL="gpt-6-astra"            # Current OpenAI flagship — provisional pending ARS validation (run scripts/cross_model_smoke_test.sh)
+# or: export ARS_CROSS_MODEL="gemini-3.1-pro-preview"  # Current Google flagship — validated, strong at factual verification
+# or: export ARS_CROSS_MODEL="gpt-5.6-sol"      # Previous generation — validated on the ChatGPT-subscription citation transport, provisional on this API route
+# or: export ARS_CROSS_MODEL="gpt-5.5"          # Previous generation — validated (designated API-route bakeoff baseline)
+
+# Optional: reasoning effort for OpenAI verifier calls (unset = provider default)
+# GPT-6 Astra API: low|medium|high|xhigh|max (the Codex citation transport rejects ultra)
+# export ARS_CROSS_MODEL_REASONING_EFFORT="medium"
 
 # Step 3: Run Claude Code as normal — cross-verification activates automatically
 claude
@@ -150,17 +201,45 @@ claude
 
 | 功能 | 未啟用跨模型 | 啟用跨模型 |
 |---|---|---|
-| 完整性驗證 | 單模型 100% 檢查 | + 30% 樣本由第二模型獨立驗證 |
+| 完整性驗證 | 單模型 100% 檢查 | + 第二模型風險分層驗證：高影響引用 100%（最終關卡再加新增/變更主張的引用 100%）+ 其餘抽樣 |
 | 魔鬼代言人 | 單模型 DA | + 跨模型產生獨立 critique，新發現自動加入 |
 | 同儕審查 | 5 位審稿人（同模型） | 同樣 5 位審稿人 + 跨模型 DA critique / calibration 支援 |
+| 不可逆檢查點 | 單模型決策 | + 設計凍結與最終編輯決定各加一次盲判跨模型決策；分歧上報給你，絕不平均 |
 
 ### 費用
 
-完整 pipeline 會增加約 $0.60-1.10 的跨模型 API 費用（GPT-5.4 Pro 定價）。詳細拆解見 [`shared/cross_model_verification.md`](../shared/cross_model_verification.md)。
+完整 pipeline 會增加約 $0.60-1.10 的跨模型 API 費用（數量級估計；以 GPT-5.4 Pro 定價量測）。現行模型陣容與詳細拆解見 [`shared/cross_model_verification.md`](../shared/cross_model_verification.md)。
 
 ### 沒有 API key？沒問題
 
 沒有設定 `ARS_CROSS_MODEL` 時，一切照舊運作。跨模型功能不會出現，也不會增加任何額外開銷。
+
+### ChatGPT 訂閱傳輸（僅限引用完整性）
+
+若 Codex CLI 0.147.0 以上已透過 ChatGPT 訂閱登入，引用完整性查驗可不使用
+OpenAI API key 而改走該訂閱。這不涵蓋魔鬼代言人、Reviewer 2、校準、re-review
+或檢查點判斷。
+
+```bash
+# Citation-integrity calls only. General DA/reviewer/judgment calls remain on API transport.
+export ARS_CROSS_MODEL_TRANSPORT="codex"
+# gpt-6-astra: current OpenAI flagship — provisional on this transport (entry-gate
+# smoke PASS 2026-09-05 on codex-cli 0.153.4; no bakeoff run yet).
+export ARS_CROSS_MODEL="gpt-6-astra"
+# gpt-5.6-sol is validated for THIS transport (2026-08-19 codex-transport bakeoff,
+# superiority on recall + latency — audits/bakeoff-gpt-5-6-sol-codex-2026-08-19.md):
+# export ARS_CROSS_MODEL="gpt-5.6-sol"
+
+python3 scripts/cross_model_codex_transport.py detect
+# The producer sends one closed codex_citation_request/1.0 object on stdin:
+printf '%s' "$CITATION_REQUEST_JSON" | scripts/cross_model_codex_verify.sh
+```
+
+偵測與執行都遵守自訂 `CODEX_HOME`，並要求訂閱狀態逐字為
+`Logged in using ChatGPT`；憑證絕不輸出。Adapter 使用僅含 auth 的暫時 home、
+空白工作根、read-only sandbox、停用本機工具，且接受的來源 URL 必須綁定到
+結構化搜尋結果。選用的 live smoke `scripts/cross_model_smoke_test_codex.sh` 會耗用
+訂閱／模型／網路資源，CI 永不執行。
 
 ---
 
@@ -175,6 +254,10 @@ Claude 會在 `<install-root>/<skill-name>/SKILL.md` 尋找 skills。這個 repo
 
 不要把整個 repository 當成單一巢狀 skill 資料夾安裝到 `.claude/skills/academic-research-skills/`。那會讓四個 `SKILL.md` 比 Claude 可發現的位置多埋一層。請參考 Anthropic 的 [Claude Code Skills documentation](https://code.claude.com/docs/en/skills)。
 
+以下各安裝方式的差異不只是方便程度：hooks、slash commands、tools allowlist、subagent
+編排、以及需要 Python 的檢查功能，在某些管道可用、在其他管道會降級或不存在。倚賴任何
+一項機制之前，請先查對照表：[CONTROL_AVAILABILITY.md](CONTROL_AVAILABILITY.md)（英文）。
+
 ### 方法零：Claude Code Plugin（v3.7.0+，Claude Code CLI / IDE 用戶推薦）
 
 如果你用的是 Claude Code CLI、VS Code extension 或 JetBrains extension，可以一行指令安裝 ARS：
@@ -186,7 +269,11 @@ Claude 會在 `<install-root>/<skill-name>/SKILL.md` 尋找 skills。這個 repo
 
 四個 skill（`deep-research`、`academic-paper`、`academic-paper-reviewer`、`academic-pipeline`）會從 plugin 的 `skills/` 目錄自動載入。
 
+**斜線命令的兩種形式（#633）。** Plugin 安裝下命令會帶命名空間：`/academic-research-skills:ars-<mode>`，這是正式形式。每個命令同時宣告了明確的 frontmatter `name`，所以在 Claude Code v2.1.216 以上，只要沒有其他命令撞名，短形式 `/ars-<mode>` 也可以直接用；session 開場宣告列的就是短形式。在 v2.1.216 之前的版本，frontmatter `name` 會取代整個命令名，命令只會以短形式 `/ars-<mode>` 出現（仍可正常呼叫，但命名空間形式失去自動完成）。
+
 **強烈建議開啟 auto-update。** 進 `/plugin` UI 找到 `academic-research-skills`，把 auto-update 開起來。ARS 大約 1–2 週發新版，開了之後會自動同步。手動更新已安裝的 plugin：`/plugin update academic-research-skills`。（`/plugin marketplace update academic-research-skills` 只重新拉 marketplace 來源，不會更新已裝 plugin。）
+
+**內建更新提醒。** Plugin 也會自己提醒你：session 啟動時比對已安裝版本與 `main` 上的最新版本（每天最多查一次網路、3 秒上限、任何失敗都靜默），落後時在開場訊息前加一行提醒，指向 `/plugin update academic-research-skills`。設 `ARS_UPDATE_CHECK=0` 可完全關閉。隱私：檢查只對本 repo 公開的 `.claude-plugin/plugin.json` 發一次 HTTPS GET，不傳送任何使用者資料。
 
 **Plugin 平台支援範圍：**
 - ✅ Claude Code CLI / VS Code extension / JetBrains extension — 完整支援
@@ -258,84 +345,55 @@ claude
 
 當你想在 [Claude Cowork](https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork) 使用四個 ARS skills 時，請用此方式。Cowork 是 Claude Desktop 的 agentic workspace。
 
-Cowork 使用相同的 skill 資料夾形狀：`~/.claude/skills/<skill-name>/SKILL.md`。
+> **Cowork 不會讀取 `~/.claude/skills/`。** 該目錄屬於 Claude Code（CLI / IDE），Cowork 不會掃描它。Cowork 讀取的是你透過 **Settings → Capabilities → Skills** 上傳的 skill，每個 skill 各自打包成一個 zip。把 skill 資料夾 symlink 或複製到 `~/.claude/skills/`，無論重啟幾次都不會讓它們出現在 Cowork。
 
 #### 前置需求
 
 - macOS 或 Windows 的最新版 Claude Desktop。請從 Anthropic 的 [Claude Desktop page](https://claude.ai/download) 下載。
 - 可用的網路連線；Cowork tasks 會呼叫 Anthropic API。
 - Cowork tasks 執行時，請保持 Claude Desktop 開啟。Cowork 在 Desktop process 內執行。
-- Cowork 對 project folder 需有可讀寫的資料夾與檔案權限。
 - 具備 Cowork 存取權的付費方案。目前方案可用性請參考 Anthropic 的 [Cowork requirements](https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork)。
-- Team 或 Enterprise 方案中，組織管理員可能停用了 Skills、plugins、connectors 或 egress。若重啟後已安裝 skills 仍未註冊，請管理員檢查組織層級設定。
+- **必須在 Settings → Capabilities 啟用 code execution / file creation**，否則 Skills 區段不會出現。參見 Anthropic 的 [Use Skills in Claude](https://support.claude.com/en/articles/12512180-use-skills-in-claude)。
+- Team 或 Enterprise 方案中，組織管理員可能停用了 Skills。若啟用 code execution 後 Skills 區段仍未出現，請管理員檢查組織層級設定。
 
-#### 選項 A：symlink 安裝（最快，單機使用）
+#### 步驟 1：每個 skill 各打一個 zip
 
-如果你只在一台機器上工作，且希望日後透過 pull repo 更新，請使用 symlinks。
-
-```bash
-git clone https://github.com/Imbad0202/academic-research-skills.git ~/academic-research-skills
-
-mkdir -p ~/.claude/skills
-cd ~/.claude/skills
-ln -s ~/academic-research-skills/deep-research deep-research
-ln -s ~/academic-research-skills/academic-paper academic-paper
-ln -s ~/academic-research-skills/academic-paper-reviewer academic-paper-reviewer
-ln -s ~/academic-research-skills/academic-pipeline academic-pipeline
-```
-
-預期路徑形狀：
-
-```text
-~/.claude/skills/deep-research/SKILL.md
-~/.claude/skills/academic-paper/SKILL.md
-~/.claude/skills/academic-paper-reviewer/SKILL.md
-~/.claude/skills/academic-pipeline/SKILL.md
-```
-
-如果你透過雲端資料夾在多台機器之間同步 `~/.claude/skills`，請改用選項 B。絕對路徑 symlinks 可能在新的 checkout 或另一台機器上失效。
-
-#### 選項 B：copy 安裝（跨機器安全，不會自動更新）
-
-如果你在多台機器之間同步 `~/.claude/skills`，或不想使用 symlinks，請使用 copies。更新時需要重新執行四個 `cp -R` 指令。
+clone repo 後，把四個 skill 資料夾各自打包成 zip，讓每個 zip 的頂層都是它自己的 `SKILL.md`（不要多包一層資料夾）。`-x "*.DS_Store"` 用來排除 macOS metadata。
 
 ```bash
-git clone https://github.com/Imbad0202/academic-research-skills.git ~/academic-research-skills
+git clone https://github.com/Imbad0202/academic-research-skills.git
+cd academic-research-skills
 
-mkdir -p ~/.claude/skills
-cp -R ~/academic-research-skills/deep-research ~/.claude/skills/deep-research
-cp -R ~/academic-research-skills/academic-paper ~/.claude/skills/academic-paper
-cp -R ~/academic-research-skills/academic-paper-reviewer ~/.claude/skills/academic-paper-reviewer
-cp -R ~/academic-research-skills/academic-pipeline ~/.claude/skills/academic-pipeline
+for s in deep-research academic-paper academic-paper-reviewer academic-pipeline; do
+  (cd "$s" && zip -r "../$s.zip" . -x "*.DS_Store")
+done
 ```
 
-預期路徑形狀：
+這會在 repo 根目錄產生四個 zip：`deep-research.zip`、`academic-paper.zip`、`academic-paper-reviewer.zip`、`academic-pipeline.zip`。每個 zip 的頂層結構如下：
 
 ```text
-~/.claude/skills/deep-research/SKILL.md
-~/.claude/skills/academic-paper/SKILL.md
-~/.claude/skills/academic-paper-reviewer/SKILL.md
-~/.claude/skills/academic-pipeline/SKILL.md
+SKILL.md
+agents/
+examples/
+references/
+templates/
 ```
 
-#### 建立或開啟 Cowork Project
+#### 步驟 2：逐一上傳每個 zip
 
-標準 UI 操作流程請參考 Anthropic 的 [Organize your tasks with Projects in Claude Cowork](https://support.claude.com/en/articles/14116274-organize-your-tasks-with-projects-in-claude-cowork)。
+1. 在 Claude Desktop（或 claude.ai，上傳的 skill 會同步到同一個帳號）中，前往 **Settings → Capabilities → Skills**。
+2. 用 Skills 面板的 **+** 上傳 skill，選擇其中一個 zip。四個 zip 各上傳一次，一次一個。
+3. 每個 skill 上傳後會出現在 **Personal skills** 下，已自動啟用，**Trigger 為 Slash command + auto**。以相同名稱重新上傳會覆蓋既有的 skill（更新到新版 ARS 時很方便）。
 
-1. 開啟 Claude Desktop。
-2. 使用模式選擇器（**Chat / Cowork**），切換到 **Cowork**。
-3. 在 **Tasks** 中使用左側導覽面板，選擇 **Use an existing folder**（使用既有資料夾）。
-4. 選取你希望 Cowork 在其中工作的本機資料夾。這會建立一個指向該資料夾的 Cowork Project。
-5. 安裝或更新 skill 資料夾後，請重啟 Cowork，讓四個 skills 註冊。
+已在 Claude Desktop 驗證（2026 年 6 月）：用此方式打包的 `deep-research.zip` 可乾淨安裝，完整 skill description 保留（不會被截到 200 字元），且 `/deep-research` 會出現在 Cowork command palette。
 
-#### Cowork 如何呼叫 skills
+#### 步驟 3：在 Cowork Task 中使用
 
-Claude 會使用每個 skill 的 `description` 判斷相關性，方式如 Anthropic 的 [Skills documentation](https://code.claude.com/docs/en/skills) 所述。例如 "help me write a paper" 這類句子只是示例，不是必須逐字輸入的 trigger phrase；改寫後的意圖也能運作。
+在 Cowork Task 中輸入 `/` 開啟 command palette 選取 skill，或直接用白話描述意圖（例如「幫我對 X 做深度文獻回顧」），Cowork 會依 skill 的 `description` 自動路由。
 
-若 description-based routing 沒有選到你想用的 skill，Cowork 也提供 Anthropic 的 [Cowork plugins documentation](https://support.claude.com/en/articles/13837440-use-plugins-in-claude-cowork) 中說明的顯式 UI 入口：
+#### 與 Claude Code 的一個取捨
 
-- 在 Cowork Task 中輸入 `/`，使用 command palette 並選取可用 skill。
-- 使用 `+` capability picker，把 skill 加入目前 Task。
+用此方式上傳的每個 skill 各自獨立運作，是一份 standalone 的指令集，體驗與 Claude Code 不同。在 Claude Code 中，四個 skill 是協作團隊：`academic-pipeline` 會把它們串起來（research → write → review → revise），每個 skill 各自驅動自己那組 sub-agent。Cowork 的 uploaded-skill runtime 不提供這種 sub-agent orchestration，所以個別 skill 會回應，但完整的 end-to-end pipeline 不會像在 Claude Code 那樣運作。想要完整的協作體驗，請用上方的方法零（plugin）或方法一（project skills）在 Claude Code 安裝 ARS。
 
 ### 方法四：使用 claude.ai（網頁版）
 
@@ -384,7 +442,7 @@ Anthropic 目前的 [Project file limits](https://support.claude.com/en/articles
 方法 4a 是 claude.ai 標準的 Custom Skill 安裝路徑：把每個 skill 資料夾壓成 zip、透過 Settings → Capabilities → Skills 上傳，Claude 會把它當成已安裝的 Skill，提供自動載入與 routing。claude.ai Custom Skills 確實支援多檔 skill 套件，包含 `scripts/`（請見 Anthropic 的 [How to create custom Skills](https://support.claude.com/en/articles/12512198-how-to-create-custom-skills) 對 supporting files 與 code execution 的說明），所以方法 4a 在機制上是可以 host 帶可執行檔的 skill 的。但**不推薦給本 suite 使用**，原因如下，且兩者疊加：
 
 1. **ARS 仰賴 Claude Code 專屬的編排功能**。每個 ARS skill 透過 Claude Code 的 Task / subagent 工具驅動 12-13 個專責 agent，並透過 Material Passport 在跨 session 之間交接檔案。Anthropic 文件描述的 claude.ai Custom Skill runtime（每個 session 一個 containerised code-execution 環境，[Use Skills in Claude](https://support.claude.com/en/articles/12512180-use-skills-in-claude) 說明 skill 啟動，但沒提到 multi-agent dispatch）並不包含 Claude Code 的 Task / subagent 控制面。可預期方法 4a 會把 ARS 呈現為 SKILL.md body 的 instructions，但缺少實際產出 suite 結果的 multi-agent dispatch。我們未實際 live upload 量測這項；本建議是基於 ARS agent 編排對 Claude Code 的依賴推論而成，並非實測失敗。
-2. **會降低 Claude Code 與 Cowork 的 routing 精度**。claude.ai 在 [Custom Skills 文件](https://claude.com/docs/skills/how-to) 把每個 skill 的 `description` 限制在 200 字元，但 [Agent Skills specification](https://agentskills.io/specification) 與 [Claude Code Skills 文件](https://code.claude.com/docs/en/skills) 都允許到 1,024 字元。本 suite 四個 description 目前在 440-842 字元區間，前段 front-load 了 Claude Code 與 Cowork 用來區分研究、寫作、審查、orchestration 的 routing 關鍵字。為了 fit 方法 4a 而砍 description，會削弱 ARS 實際運作平台（Claude Code 與 Cowork）上的 routing，換到的只是 claude.ai 上未經實測的部分相容。
+2. **會降低 Claude Code 與 Cowork 的 routing 精度**。claude.ai 在 [Custom Skills 文件](https://claude.com/docs/skills/how-to) 把每個 skill 的 `description` 限制在 200 字元，但 [Agent Skills specification](https://agentskills.io/specification) 與 [Claude Code Skills 文件](https://code.claude.com/docs/en/skills) 都允許到 1,024 字元。本 suite 四個 description 都超過 claude.ai 的 200 字元上限、但仍在 Claude Code 允許的 1,024 字元內，前段 front-load 了 Claude Code 與 Cowork 用來區分研究、寫作、審查、orchestration 的 routing 關鍵字。為了 fit 方法 4a 而砍 description，會削弱 ARS 實際運作平台（Claude Code 與 Cowork）上的 routing，換到的只是 claude.ai 上未經實測的部分相容。
 
 **建議的替代路徑：**
 
@@ -423,3 +481,17 @@ zip -r academic-pipeline.zip academic-pipeline
 - claude.ai 不支援本機 shell commands；結果可能不如依賴本機 scripts 的 Claude Code workflows 完整。
 - 跨模型驗證（`ARS_CROSS_MODEL`）需要 Claude Code 與 API keys。
 - 直接產出 `.docx` 需要 Pandoc，LaTeX/PDF 輸出需要 Claude Code 搭配 `tectonic`；claude.ai 仍可產出 Markdown 與 DOCX 轉換說明。
+### 方法五：Claude Science 匯入（v3.14.0+）
+
+Claude Science 可直接從 GitHub 匯入四個 ARS skill：
+
+1. 開啟 **Customize → Capabilities → Skills → Import from GitHub**。
+2. 貼上 `https://github.com/Imbad0202/academic-research-skills`，按 **Preview**。
+3. 四個 skill（`academic-paper`、`academic-paper-reviewer`、`academic-pipeline`、`deep-research`）全部出現——按 **Import 4 skills**。
+
+**注意事項：**
+
+- 需要 repo 狀態為 v3.14.0+——匯入器讀取 `.claude-plugin/marketplace.json` 中明列的 skill 路徑。更早的 tag 只透過 symlink 的 `skills/` 目錄暴露 skill，GitHub-API 匯入器無法穿越（會回報「no skills/ dirs with SKILL.md」）。
+- 匯入是**單次快照**：Claude Science 不會追蹤 repo。ARS 發版後需重新匯入才能取得更新。
+- **會轉移的**：方法論層——各 skill 的 `SKILL.md` 與其協定（研究／寫作／審查），Claude Science 的 agent 會在相關時讀取。
+- **不會轉移的**：Claude Code 專屬機制——`/ars-*` slash commands、hooks（含 write-scope guard）、跨模型驗證 scripts、Task-tool subagent 編排。Claude Science 有自己的 specialist agent 系統與內建引用查核 reviewer；把 Claude Science 上的執行視為「ARS 方法論 + Claude Science 自家機制」，而非 1:1 的 pipeline 移植。
